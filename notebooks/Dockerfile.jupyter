@@ -1,0 +1,25 @@
+# Pinned to 3.8 to match apache/spark:3.5.3's baked-in Python -- driver and
+# executors must run the same minor version or jobs fail with
+# PYTHON_VERSION_MISMATCH.
+FROM python:3.8-slim
+
+# default-jdk-headless: PySpark's driver is a JVM process under the hood
+# (Py4J bridges Python calls to Java); no JVM means `import pyspark` fails.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    default-jdk-headless \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/default-java
+
+WORKDIR /home/jovyan/work
+
+COPY requirements-jupyter.txt .
+RUN pip install --no-cache-dir --break-system-packages -r requirements-jupyter.txt
+
+EXPOSE 8888
+
+# Token disabled -- LAN-only, matches the fixed dev creds used elsewhere
+# in this stack. Re-enable before exposing this port beyond the LAN.
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", \
+     "--ServerApp.token=", "--ServerApp.password="]

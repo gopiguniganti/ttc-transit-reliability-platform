@@ -1,0 +1,13 @@
+# Pinned to match the versions already used elsewhere in this repo:
+# pyspark/delta match compose.infra.yml's spark-master (apache/spark:3.5.3)
+# and notebooks/00_checkpoint.py's --packages versions, so code you write
+# here behaves identically to spark-submit against the real cluster.
+jupyterlab==4.2.5
+httpx==0.27.2
+pyspark==3.5.3
+delta-spark==3.2.0
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.35
+ipython-sql==0.5.0
+boto3==1.35.36
+pandas==2.0.3
