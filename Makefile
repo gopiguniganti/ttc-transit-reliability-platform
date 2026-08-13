@@ -1,4 +1,4 @@
-.PHONY: help poller-up poller-down poller-logs poller-status test infra-up infra-down infra-status checkpoint kafka-topics notebook-logs replay-asap replay-realtime stream-logs on off gtfs-load
+.PHONY: help poller-up poller-down poller-logs poller-status test infra-up infra-down infra-status checkpoint kafka-topics notebook-logs replay-asap replay-realtime stream-logs on off gtfs-load weather-load restrictions-load
 
 help:
 	@echo "--- poller (homelab) ---"
@@ -21,6 +21,8 @@ help:
 	@echo "notebook-logs  Follow JupyterLab logs (URL also shown by infra-status)"
 	@echo "stream-logs    Follow the Kafka->Delta streaming job's logs"
 	@echo "gtfs-load      Load routes/stops/trips from TTC's GTFS static feed into Postgres"
+	@echo "weather-load   Load current Toronto conditions from Environment Canada"
+	@echo "restrictions-load  Load road restrictions + spatial-join against stops"
 
 poller-up:
 	docker compose -f compose.poller.yml up -d --build
@@ -97,6 +99,12 @@ replay-realtime:
 
 gtfs-load:
 	docker compose -f compose.infra.yml run --rm --build gtfs-loader
+
+weather-load:
+	docker compose -f compose.infra.yml run --rm --build weather-loader
+
+restrictions-load:
+	docker compose -f compose.infra.yml run --rm --build road-restrictions-loader
 
 checkpoint:
 	docker exec -it ttc-spark-master /opt/spark/bin/spark-submit \

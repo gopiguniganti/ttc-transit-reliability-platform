@@ -266,6 +266,40 @@ services:
     networks:
       - ttc-net
 
+  # On-demand jobs, not part of `up -d` -- run with `make weather-load` /
+  # `make restrictions-load`. Same image, different entrypoint script.
+  weather-loader:
+    build: ./context_data
+    container_name: ttc-weather-loader
+    profiles: ["tools"]
+    command: ["python3", "load_weather.py"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: serving
+      POSTGRES_USER: ttc
+      POSTGRES_PASSWORD: ttc_dev_password
+    depends_on:
+      - postgres
+    networks:
+      - ttc-net
+
+  road-restrictions-loader:
+    build: ./context_data
+    container_name: ttc-road-restrictions-loader
+    profiles: ["tools"]
+    command: ["python3", "load_road_restrictions.py"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: serving
+      POSTGRES_USER: ttc
+      POSTGRES_PASSWORD: ttc_dev_password
+    depends_on:
+      - postgres
+    networks:
+      - ttc-net
+
 networks:
   ttc-net:
     name: ttc-net
