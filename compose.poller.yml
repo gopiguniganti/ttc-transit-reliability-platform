@@ -1,0 +1,33 @@
+# Tonight's job: run ONLY this, on the homelab (always-on machine).
+# Everything else (Kafka, Spark, Airflow...) comes later, on the PC.
+#
+# Run it:
+#   docker compose -f compose.poller.yml up -d --build
+#
+# Watch it:
+#   docker compose -f compose.poller.yml logs -f
+#
+# Stop it (data is safe on disk either way, this just stops collection):
+#   docker compose -f compose.poller.yml down
+
+services:
+  poller:
+    build: ./poller
+    container_name: ttc-poller
+    restart: unless-stopped   # survives homelab reboots; does NOT restart after `down`
+    environment:
+      POLL_URL: "https://bustime.ttc.ca/gtfsrt/vehicles"
+      POLL_INTERVAL_SECONDS: "20"
+      FLUSH_INTERVAL_SECONDS: "300"   # 5 minutes -> ~288 parquet files/day, not 4320
+      DATA_DIR: "/data"
+    volumes:
+      # Bind-mount to host disk, NOT a named Docker volume. We want this
+      # sitting in an ordinary folder we can `ls`, `scp`, tar up, and later
+      # point MinIO/Spark at directly -- not hidden inside Docker's storage
+      # driver.
+      - ./data:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
