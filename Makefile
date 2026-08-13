@@ -1,4 +1,4 @@
-.PHONY: help poller-up poller-down poller-logs poller-status test infra-up infra-down infra-status checkpoint kafka-topics notebook-logs replay-asap replay-realtime stream-logs on off
+.PHONY: help poller-up poller-down poller-logs poller-status test infra-up infra-down infra-status checkpoint kafka-topics notebook-logs replay-asap replay-realtime stream-logs on off gtfs-load
 
 help:
 	@echo "--- poller (homelab) ---"
@@ -20,6 +20,7 @@ help:
 	@echo "checkpoint     Run the Spark<->MinIO<->Delta connectivity test"
 	@echo "notebook-logs  Follow JupyterLab logs (URL also shown by infra-status)"
 	@echo "stream-logs    Follow the Kafka->Delta streaming job's logs"
+	@echo "gtfs-load      Load routes/stops/trips from TTC's GTFS static feed into Postgres"
 
 poller-up:
 	docker compose -f compose.poller.yml up -d --build
@@ -93,6 +94,9 @@ replay-asap:
 replay-realtime:
 	docker compose -f compose.poller.yml run --rm --no-deps poller \
 		python3 replay.py --dir /data/raw/vehicle_positions --kafka $(KAFKA_BOOTSTRAP) --speed realtime
+
+gtfs-load:
+	docker compose -f compose.infra.yml run --rm --build gtfs-loader
 
 checkpoint:
 	docker exec -it ttc-spark-master /opt/spark/bin/spark-submit \

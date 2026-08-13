@@ -249,6 +249,23 @@ services:
     networks:
       - ttc-net
 
+  # On-demand job, not part of `up -d` -- run with `make gtfs-load`. Loads
+  # routes/stops/trips from TTC's public GTFS static feed into Postgres.
+  gtfs-loader:
+    build: ./gtfs_static
+    container_name: ttc-gtfs-loader
+    profiles: ["tools"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: serving
+      POSTGRES_USER: ttc
+      POSTGRES_PASSWORD: ttc_dev_password
+    depends_on:
+      - postgres
+    networks:
+      - ttc-net
+
 networks:
   ttc-net:
     name: ttc-net
