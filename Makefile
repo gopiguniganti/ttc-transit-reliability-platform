@@ -1,4 +1,4 @@
-.PHONY: help poller-up poller-down poller-logs poller-status test infra-up infra-down infra-status checkpoint kafka-topics notebook-logs replay-asap replay-realtime stream-logs
+.PHONY: help poller-up poller-down poller-logs poller-status test infra-up infra-down infra-status checkpoint kafka-topics notebook-logs replay-asap replay-realtime stream-logs on off
 
 help:
 	@echo "--- poller (homelab) ---"
@@ -11,6 +11,8 @@ help:
 	@echo "replay-realtime  Same, but paced to match the original poll timing"
 	@echo ""
 	@echo "--- infra (PC) ---"
+	@echo "on             Alias for infra-up -- run this after powering the PC back on"
+	@echo "off            Alias for infra-down -- run this before shutting the PC down"
 	@echo "infra-up       Start Kafka, MinIO, Postgres, Spark cluster"
 	@echo "infra-down     Stop everything (data persists in Docker volumes)"
 	@echo "infra-status   Show container status + service URLs"
@@ -50,6 +52,9 @@ infra-up:
 
 infra-down:
 	docker compose -f compose.infra.yml down
+
+on: infra-up
+off: infra-down
 
 infra-status:
 	@docker compose -f compose.infra.yml ps
