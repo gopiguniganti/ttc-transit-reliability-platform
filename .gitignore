@@ -7,3 +7,6 @@ __pycache__/
 .venv/
 .ipynb_checkpoints/
 notebooks/spark-warehouse/
+dashboard.html
+pipeline-status.html
+.claude/

@@ -1,4 +1,4 @@
-.PHONY: help poller-up poller-down poller-logs poller-status test infra-up infra-down infra-status checkpoint kafka-topics notebook-logs replay-asap replay-realtime
+.PHONY: help poller-up poller-down poller-logs poller-status test infra-up infra-down infra-status checkpoint kafka-topics notebook-logs replay-asap replay-realtime stream-logs
 
 help:
 	@echo "--- poller (homelab) ---"
@@ -17,6 +17,7 @@ help:
 	@echo "kafka-topics   Create the Kafka topics we need"
 	@echo "checkpoint     Run the Spark<->MinIO<->Delta connectivity test"
 	@echo "notebook-logs  Follow JupyterLab logs (URL also shown by infra-status)"
+	@echo "stream-logs    Follow the Kafka->Delta streaming job's logs"
 
 poller-up:
 	docker compose -f compose.poller.yml up -d --build
@@ -62,9 +63,13 @@ infra-status:
 	@echo "Postgres:         localhost:5433  (ttc / ttc_dev_password, db=serving)"
 	@echo "pgAdmin:          http://localhost:5050  (admin@ttcplatform.dev / admin)"
 	@echo "JupyterLab:       http://localhost:8888  (no token)"
+	@echo "Streaming job UI: http://localhost:4042  (Kafka -> Delta, live while the query runs)"
 
 notebook-logs:
 	docker compose -f compose.infra.yml logs -f --tail=50 jupyter
+
+stream-logs:
+	docker compose -f compose.infra.yml logs -f --tail=50 spark-streaming
 
 kafka-topics:
 	docker exec ttc-kafka /opt/kafka/bin/kafka-topics.sh --create \

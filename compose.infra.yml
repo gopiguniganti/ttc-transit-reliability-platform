@@ -201,6 +201,33 @@ services:
     networks:
       - ttc-net
 
+  # Long-running consumer: Kafka topic -> Delta table on MinIO. Unlike the
+  # notebook/checkpoint jobs this must stay alive, so it gets its own
+  # restart policy instead of being a one-shot spark-submit.
+  spark-streaming:
+    image: apache/spark:3.5.3
+    container_name: ttc-spark-streaming
+    user: root
+    restart: unless-stopped
+    depends_on:
+      - spark-master
+      - kafka
+      - minio
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --conf spark.cores.max=4
+      --packages org.apache.hadoop:hadoop-aws:3.3.4,io.delta:delta-spark_2.12:3.2.0,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3
+      /opt/spark-apps/01_stream_to_delta.py
+    ports:
+      - "4042:4040"   # this job's own driver UI, live while the query runs
+    volumes:
+      - ./notebooks:/opt/spark-apps
+      - spark_ivy:/opt/spark/.ivy2
+      - spark_events:/tmp/spark-events
+    networks:
+      - ttc-net
+
   # Interactive PySpark / Spark SQL / Postgres / MinIO environment,
   # against the real cluster instead of just spark-submit scripts.
   jupyter:
