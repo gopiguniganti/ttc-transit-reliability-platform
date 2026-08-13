@@ -1,4 +1,4 @@
-# Compute + streaming stack for local dev on Beast. No restart policy --
+# Compute + streaming stack for local dev on the compute host. No restart policy --
 # unlike the poller, nothing here needs to survive a reboot.
 #
 #   docker compose -f compose.infra.yml up -d
