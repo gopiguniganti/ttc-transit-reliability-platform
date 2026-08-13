@@ -6,12 +6,9 @@ unreliable.*
 
 Status: **Phases 1–7 built and verified end to end** — live ingestion, Kafka, Structured Streaming to
 Delta, a dimensional model, a bunching heuristic, weather/road-restriction context data, and Airflow
-orchestration for all of it. See [`docs/architecture.md`](docs/architecture.md) for the full
-architecture, every design decision, and the real bugs found while building it (with numbers, not just
-"it works").
+orchestration for all of it.
 
-This runs across two machines — see the "Two machines, two jobs" section in
-[`docs/architecture.md`](docs/architecture.md) for why:
+This runs across two machines:
 
 - **collector host** — an always-on machine that just runs the poller (`compose.poller.yml`)
 - **compute host** — your PC, running everything else (`compose.infra.yml`): Kafka, MinIO, Postgres,
@@ -54,8 +51,8 @@ make restrictions-load   # road restrictions + spatial join against stops (Phase
 make replay-asap          # republish collected raw files into Kafka, for testing (Phase 2)
 ```
 
-All four also have an Airflow DAG that runs them on a schedule instead — paused by default, see
-Phase 7 in the architecture doc.
+All four also have an Airflow DAG that runs them on a schedule instead — paused by default (unpause via
+the UI at `:8090` or `airflow dags unpause <dag_id>`).
 
 ## Run the tests (no network needed, works anywhere)
 
@@ -67,8 +64,7 @@ make test   # poller + replay tests
 ```
 
 The same pattern applies to `gtfs_static/`, `context_data/`, and their tests under `tests/` — build that
-subproject's image and run pytest inside it (see `docs/architecture.md` for the exact commands used
-while building each phase).
+subproject's image and run pytest inside it.
 
 ## What's on disk after a night of collection
 
@@ -82,7 +78,7 @@ Plus, once the compute host's stack has run: a Delta table on MinIO fed by Kafka
 dimensional model and bunching/weather/restriction tables in Postgres, and Airflow DAGs ready to keep
 all of it fresh on a schedule.
 
-## Why it's built this way (short version — full decisions log in `docs/architecture.md`)
+## Why it's built this way
 
 - **Raw bytes saved before decoding.** GTFS-RT publishes no history — this minute's data is gone
   forever once TTC's server moves on. If decode logic ever has a bug, the fix gets applied and the raw

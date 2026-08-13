@@ -10,3 +10,4 @@ notebooks/spark-warehouse/
 dashboard.html
 pipeline-status.html
 .claude/
+docs/architecture.md
