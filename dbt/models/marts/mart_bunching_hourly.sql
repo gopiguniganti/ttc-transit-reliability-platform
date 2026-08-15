@@ -2,6 +2,11 @@
 -- panel showing which routes bunch the most and when -- the individual-event
 -- grain of mart_bunching_events is too dense to plot directly over days of
 -- data.
+{{ config(indexes=[
+    {'columns': ['event_hour'], 'type': 'btree'},
+    {'columns': ['route_short_name'], 'type': 'btree'},
+]) }}
+
 select
     route_id,
     route_short_name,
