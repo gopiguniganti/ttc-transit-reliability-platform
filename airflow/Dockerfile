@@ -35,3 +35,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=airflow:root gtfs_static/ /opt/airflow/jobs/gtfs_static/
 COPY --chown=airflow:root context_data/ /opt/airflow/jobs/context_data/
 COPY --chown=airflow:root notebooks/02_silver_bunching.py /opt/airflow/jobs/spark_jobs/02_silver_bunching.py
+
+# dbt build, so the "run the pipeline" DAG can refresh the gold layer
+# itself instead of that being a separate `make dbt-build` on the host.
+# profiles.yml's postgres host already defaults to "postgres" (the
+# service name), which resolves the same way from this container.
+COPY --chown=airflow:root dbt/ /opt/airflow/jobs/dbt/
+ENV DBT_PROFILES_DIR=/opt/airflow/jobs/dbt
