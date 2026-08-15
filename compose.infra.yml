@@ -135,6 +135,29 @@ services:
     networks:
       - ttc-net
 
+  # The end-user-facing view: reads dbt's gold layer (marts.mart_bunching_*,
+  # see dbt/models/marts) straight out of Postgres. Datasource and dashboard
+  # are provisioned as files (infra/grafana/provisioning), not clicked
+  # together in the UI, so they exist automatically on first boot and are
+  # reproducible if this container is ever recreated -- same reasoning as
+  # infra/postgres-init.
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: ttc-grafana
+    depends_on:
+      - postgres
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    networks:
+      - ttc-net
+
   # Official Apache Spark image. One master, two workers.
   spark-master:
     image: apache/spark:3.5.3
@@ -397,6 +420,7 @@ volumes:
   minio_data:
   postgres_data:
   pgadmin_data:
+  grafana_data:
   spark_ivy:
   spark_events:
   airflow_logs:
