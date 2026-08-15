@@ -43,6 +43,18 @@ spark.sparkContext.setLogLevel("WARN")
 
 bronze = spark.read.format("delta").load("s3a://bronze/vehicle_positions_stream")
 
+# Real bug found while building the Grafana dashboard: a Kafka crash-loop
+# during the backlog replay (spark-streaming restarted 5 times -- see
+# docs/architecture.md) left ~2.9M (vehicle_id, feed_timestamp) groups with
+# duplicate rows in bronze -- a batch read but not cleanly checkpointed
+# before Kafka died got reprocessed on restart. Undetected, this fed
+# identical back-to-back rows into the bunching window function below,
+# which made lag() match a vehicle against its own duplicate --
+# ~44% of "bunching events" turned out to be a vehicle bunched with
+# itself. Deduplicating here, before anything downstream sees these rows,
+# fixes it at the source rather than filtering the symptom out later.
+bronze = bronze.dropDuplicates(["vehicle_id", "feed_timestamp"])
+
 clean = bronze.filter(
     col("latitude").isNotNull()
     & col("longitude").isNotNull()
@@ -97,6 +109,12 @@ bunching = (
     .withColumn("prev_vehicle_id", lag("vehicle_id").over(window))
     .withColumn("prev_stop_sequence", lag("current_stop_sequence").over(window))
     .filter(col("prev_vehicle_id").isNotNull())
+    # A vehicle can't bunch with itself -- a defensive check, not the fix
+    # (the dropDuplicates above is the fix). Kept as a second line of
+    # defense: if any other source of duplicate/near-duplicate rows ever
+    # slips past that dedup, this stops it from silently producing a
+    # nonsense "self-bunching" event again.
+    .filter(col("prev_vehicle_id") != col("vehicle_id"))
     .withColumn("stop_sequence_gap", col("current_stop_sequence") - col("prev_stop_sequence"))
     .filter(col("stop_sequence_gap") <= 1)
     .select(
@@ -114,7 +132,12 @@ print(f"BUNCHING_EVENTS: {bunching_count}")
 (
     bunching.write.jdbc(
         JDBC_URL, "bunching_events", mode="overwrite",
-        properties={**JDBC_PROPS, "batchsize": "5000", "rewriteBatchedStatements": "true"},
+        # mode="overwrite" alone does DROP TABLE + CREATE -- which Postgres
+        # refuses once anything depends on the table (hit this directly:
+        # dbt's staging.stg_bunching_events view blocked it with "other
+        # objects depend on it"). truncate=true makes Spark issue TRUNCATE
+        # instead, which dbt's downstream view/table dependencies survive.
+        properties={**JDBC_PROPS, "batchsize": "5000", "rewriteBatchedStatements": "true", "truncate": "true"},
     )
 )
 
