@@ -195,7 +195,7 @@ services:
     environment:
       SPARK_HISTORY_OPTS: "-Dspark.history.fs.logDirectory=/tmp/spark-events"
     ports:
-      - "18080:18080"
+      - "18081:18080"   # host 18081: 18080 is taken by another Jupyter/Spark stack's history server
     volumes:
       - spark_events:/tmp/spark-events
     networks:
@@ -240,8 +240,8 @@ services:
       - postgres
       - minio
     ports:
-      - "8888:8888"   # JupyterLab -- open this in a browser
-      - "4040:4040"   # Spark application (driver) UI for the notebook's SparkSession -- live only
+      - "8889:8888"   # JupyterLab -- open this in a browser. Host 8889: 8888 is taken by another Jupyter/Spark stack
+      - "4043:4040"   # Spark application (driver) UI for the notebook's SparkSession -- live only. Host 4043: 4040 is taken by the other stack
     volumes:
       - ./notebooks:/home/jovyan/work
       - spark_ivy:/home/jovyan/.ivy2   # share the Maven/Ivy jar cache with spark-master
