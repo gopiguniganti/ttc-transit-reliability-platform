@@ -73,6 +73,7 @@ infra-status:
 	@echo "MinIO console:    http://localhost:9001  (minioadmin / minioadmin123)"
 	@echo "Postgres:         localhost:5433  (ttc / ttc_dev_password, db=serving)"
 	@echo "pgAdmin:          http://localhost:5050  (admin@ttcplatform.dev / admin)"
+	@echo "Grafana:          http://localhost:3000  (admin / admin) -- run 'make dbt-build' first"
 	@echo "JupyterLab:       http://localhost:8888  (no token)"
 	@echo "Streaming job UI: http://localhost:4042  (Kafka -> Delta, live while the query runs)"
 
