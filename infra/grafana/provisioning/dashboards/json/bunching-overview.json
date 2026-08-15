@@ -4,7 +4,7 @@
   "description": "Why buses bunch: reads dbt's gold layer (marts.mart_bunching_events / marts.mart_bunching_hourly) directly -- no custom app, this dashboard IS the end-user view.",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": true,
   "time": { "from": "now-3d", "to": "now" },
   "refresh": "",
@@ -20,11 +20,19 @@
       }
     },
     {
+      "id": 10,
+      "type": "row",
+      "title": "Overview",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
+      "panels": []
+    },
+    {
       "id": 1,
       "type": "stat",
       "title": "Bunching events (selected range)",
       "description": "Total detected pairs of vehicles caught within one stop of each other, across all routes, in the selected time range.",
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 4 },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 5 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
@@ -37,42 +45,66 @@
     },
     {
       "id": 2,
-      "type": "stat",
-      "title": "Routes affected (of 233 total)",
-      "description": "How many of TTC's 233 surface routes had at least one bunching event in the selected time range.",
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 4 },
+      "type": "gauge",
+      "title": "% of network affected",
+      "description": "Share of TTC's 233 surface routes that had at least one bunching event in the selected time range. Higher = a more widespread problem, not just a few bad routes.",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 5 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT COUNT(DISTINCT route_id) AS value FROM marts.mart_bunching_events WHERE $__timeFilter(event_time)"
+          "rawSql": "SELECT ROUND(100.0 * COUNT(DISTINCT route_id) / 233, 1) AS value FROM marts.mart_bunching_events WHERE $__timeFilter(event_time)"
         }
       ],
-      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" } }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 60 }
+            ]
+          }
+        },
+        "overrides": []
+      }
     },
     {
-      "id": 3,
-      "type": "table",
-      "title": "Top routes by bunching events",
-      "description": "\"Avg stop gap\" is how many stops apart the two vehicles typically were when flagged -- 0 means back-to-back at the same stop, 1 means one stop apart (the heuristic's cutoff).",
-      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 4 },
+      "id": 12,
+      "type": "barchart",
+      "title": "Top 10 routes by bunching events",
+      "description": "Same ranking as the detail table below, as a quick visual scan -- the streetcar routes (5xx) usually dominate the top of this list.",
+      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 5 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT route_short_name AS \"Route\", route_long_name AS \"Name\", SUM(bunching_event_count) AS \"Bunching events\", round(AVG(avg_stop_sequence_gap)::numeric, 2) AS \"Avg stop gap\" FROM marts.mart_bunching_hourly WHERE $__timeFilter(event_hour) GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 15"
+          "rawSql": "SELECT (route_short_name || ' ' || route_long_name) AS \"Route\", SUM(bunching_event_count) AS \"Bunching events\" FROM marts.mart_bunching_hourly WHERE $__timeFilter(event_hour) GROUP BY 1 ORDER BY 2 DESC LIMIT 10"
         }
       ],
-      "fieldConfig": { "defaults": {}, "overrides": [] }
+      "options": { "orientation": "horizontal", "xTickLabelRotation": 0, "legend": { "showLegend": false } },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "When it happens",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "panels": []
     },
     {
       "id": 4,
       "type": "timeseries",
       "title": "Bunching events per hour (top 8 routes)",
       "description": "One line per route, labeled \"<number> <name>\", from mart_bunching_hourly -- the event-level mart is too dense to plot directly. Y axis is bunching events detected in that hour.",
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
+      "gridPos": { "h": 10, "w": 16, "x": 0, "y": 18 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
@@ -84,11 +116,52 @@
       "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10, "axisLabel": "Events / hour" } }, "overrides": [] }
     },
     {
+      "id": 14,
+      "type": "barchart",
+      "title": "Bunching events by weather condition",
+      "description": "Real join against mart_bunching_events, but only as varied as the weather loader's run history so far -- see README's Known limitations. More days of weather-load will fill this out into a real correlation, not just two bars.",
+      "gridPos": { "h": 10, "w": 8, "x": 16, "y": 18 },
+      "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT weather_condition AS \"Weather\", COUNT(*) AS \"Bunching events\" FROM marts.mart_bunching_events WHERE $__timeFilter(event_time) GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ],
+      "options": { "orientation": "vertical", "legend": { "showLegend": false } },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Detail",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
+      "panels": []
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Top routes by bunching events",
+      "description": "\"Avg stop gap\" is how many stops apart the two vehicles typically were when flagged -- 0 means back-to-back at the same stop, 1 means one stop apart (the heuristic's cutoff).",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 29 },
+      "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT route_short_name AS \"Route\", route_long_name AS \"Name\", SUM(bunching_event_count) AS \"Bunching events\", round(AVG(avg_stop_sequence_gap)::numeric, 2) AS \"Avg stop gap\" FROM marts.mart_bunching_hourly WHERE $__timeFilter(event_hour) GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 15"
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] }
+    },
+    {
       "id": 5,
       "type": "table",
       "title": "Recent bunching events -- why they happened",
       "description": "Each row: a real detected bunching pair, its route, and the weather closest in time to when it happened (mart_bunching_events, joined via dbt LATERAL). \"Stops apart\": 0 = same stop, 1 = one stop apart. Road-restriction context isn't joined in yet -- see docs/architecture.md Phase 8 for why.",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 39 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
