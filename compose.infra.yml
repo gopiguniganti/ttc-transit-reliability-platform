@@ -300,6 +300,25 @@ services:
     networks:
       - ttc-net
 
+  # On-demand: run with `make dbt-build` / `make dbt-test`. Builds the
+  # staging/marts models over Postgres's serving DB -- see dbt/models.
+  dbt:
+    build: ./dbt
+    container_name: ttc-dbt
+    profiles: ["tools"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: serving
+      POSTGRES_USER: ttc
+      POSTGRES_PASSWORD: ttc_dev_password
+    volumes:
+      - ./dbt:/dbt
+    depends_on:
+      - postgres
+    networks:
+      - ttc-net
+
   # --- Airflow: orchestrates the on-demand jobs above on a schedule -----
   # instead of running them by hand via `make`. LocalExecutor (not the
   # Sequential default) since a real Postgres backend is already here --

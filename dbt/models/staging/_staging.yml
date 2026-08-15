@@ -1,0 +1,56 @@
+version: 2
+
+models:
+  - name: stg_bunching_events
+    columns:
+      - name: route_id
+        tests:
+          - not_null
+      - name: event_time
+        tests:
+          - not_null
+      - name: vehicle_id_a
+        tests:
+          - not_null
+      - name: vehicle_id_b
+        tests:
+          - not_null
+
+  - name: stg_dim_route_current
+    columns:
+      - name: route_id
+        tests:
+          - not_null
+          - unique
+
+  - name: stg_dim_stop_current
+    columns:
+      - name: stop_id
+        tests:
+          - not_null
+          - unique
+
+  - name: stg_fact_weather
+    columns:
+      - name: station_id
+        tests:
+          - not_null
+      - name: observed_at
+        tests:
+          - not_null
+
+  - name: stg_road_restrictions
+    columns:
+      - name: restriction_id
+        tests:
+          - not_null
+          - unique
+
+  - name: stg_stops_near_restrictions
+    columns:
+      - name: stop_id
+        tests:
+          - not_null
+      - name: restriction_id
+        tests:
+          - not_null

@@ -23,6 +23,9 @@ help:
 	@echo "gtfs-load      Load routes/stops/trips from TTC's GTFS static feed into Postgres"
 	@echo "weather-load   Load current Toronto conditions from Environment Canada"
 	@echo "restrictions-load  Load road restrictions + spatial-join against stops"
+	@echo "dbt-build      Build the dbt staging/mart models over Postgres's serving DB"
+	@echo "dbt-test       Run dbt's data tests (not_null/unique/etc, see dbt/models)"
+	@echo "dbt-docs       Generate + serve dbt docs at http://localhost:8087"
 
 poller-up:
 	docker compose -f compose.poller.yml up -d --build
@@ -111,3 +114,13 @@ checkpoint:
 		--master spark://spark-master:7077 \
 		--packages org.apache.hadoop:hadoop-aws:3.3.4,io.delta:delta-spark_2.12:3.2.0 \
 		/opt/spark-apps/00_checkpoint.py
+
+dbt-build:
+	docker compose -f compose.infra.yml run --rm --build dbt dbt build
+
+dbt-test:
+	docker compose -f compose.infra.yml run --rm --build dbt dbt test
+
+dbt-docs:
+	docker compose -f compose.infra.yml run --rm --build -p 8087:8080 dbt \
+		sh -c "dbt docs generate && dbt docs serve --host 0.0.0.0 --port 8080"
