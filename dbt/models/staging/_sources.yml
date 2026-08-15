@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: serving
+    schema: public
+    description: >
+      Tables written directly by the Spark/Python jobs (Phases 3, 5, 6) --
+      the raw input dbt builds on top of, not dbt's own output.
+    tables:
+      - name: bunching_events
+        description: One row per detected bunching pair, written by notebooks/02_silver_bunching.py.
+      - name: dim_route
+        description: SCD2 route dimension, loaded by gtfs_static/load_dimensions.py.
+      - name: dim_stop
+        description: SCD2 stop dimension, loaded by gtfs_static/load_dimensions.py.
+      - name: fact_weather
+        description: Hourly-ish weather observations, loaded by context_data/load_weather.py.
+      - name: road_restrictions
+        description: Current road closures/construction snapshot, loaded by context_data/load_road_restrictions.py.
+      - name: stops_near_restrictions
+        description: Precomputed (stop, restriction) pairs within 150m, from the same loader.
