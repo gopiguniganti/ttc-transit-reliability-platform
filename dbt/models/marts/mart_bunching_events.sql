@@ -9,6 +9,17 @@
 -- notebooks/02_silver_bunching.py, not something dbt can add after the
 -- fact. Documented as a real gap, not silently skipped -- see
 -- docs/architecture.md.
+--
+-- Indexes: dbt-postgres creates these after the table is built (not just
+-- documentation) -- without them, Grafana's "recent events" panel was
+-- doing a full parallel sequential scan across all 4.5M+ rows on every
+-- dashboard load (~2s, confirmed via EXPLAIN ANALYZE) just to sort by
+-- event_time and take the top 200.
+{{ config(indexes=[
+    {'columns': ['event_time'], 'type': 'btree'},
+    {'columns': ['route_id'], 'type': 'btree'},
+]) }}
+
 with bunching as (
     select * from {{ ref('stg_bunching_events') }}
 ),
