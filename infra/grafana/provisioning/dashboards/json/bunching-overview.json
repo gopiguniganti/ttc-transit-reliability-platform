@@ -4,16 +4,27 @@
   "description": "Why buses bunch: reads dbt's gold layer (marts.mart_bunching_events / marts.mart_bunching_hourly) directly -- no custom app, this dashboard IS the end-user view.",
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
-  "time": { "from": "now-7d", "to": "now" },
+  "time": { "from": "now-3d", "to": "now" },
   "refresh": "",
   "panels": [
+    {
+      "id": 6,
+      "type": "text",
+      "title": "",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "### What's a \"bunching event\"?\nTwo TTC vehicles on the same route end up within one stop of each other, instead of being evenly spaced. Riders feel this as \"two buses back to back, then a 20-minute gap.\" Every number below is built from **real GTFS-RT vehicle-position data**, not a simulation."
+      }
+    },
     {
       "id": 1,
       "type": "stat",
       "title": "Bunching events (selected range)",
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "description": "Total detected pairs of vehicles caught within one stop of each other, across all routes, in the selected time range.",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 4 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
@@ -22,13 +33,14 @@
           "rawSql": "SELECT COUNT(*) AS value FROM marts.mart_bunching_events WHERE $__timeFilter(event_time)"
         }
       ],
-      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" } }, "overrides": [] }
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" } }, "overrides": [] }
     },
     {
       "id": 2,
       "type": "stat",
-      "title": "Routes affected",
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "title": "Routes affected (of 233 total)",
+      "description": "How many of TTC's 233 surface routes had at least one bunching event in the selected time range.",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 4 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
@@ -43,7 +55,8 @@
       "id": 3,
       "type": "table",
       "title": "Top routes by bunching events",
-      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 0 },
+      "description": "\"Avg stop gap\" is how many stops apart the two vehicles typically were when flagged -- 0 means back-to-back at the same stop, 1 means one stop apart (the heuristic's cutoff).",
+      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 4 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
@@ -58,30 +71,30 @@
       "id": 4,
       "type": "timeseries",
       "title": "Bunching events per hour (top 8 routes)",
-      "description": "One line per route, from mart_bunching_hourly -- the event-level mart is too dense to plot directly.",
-      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 6 },
+      "description": "One line per route, labeled \"<number> <name>\", from mart_bunching_hourly -- the event-level mart is too dense to plot directly. Y axis is bunching events detected in that hour.",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT h.event_hour AS \"time\", h.route_short_name AS metric, h.bunching_event_count AS value FROM marts.mart_bunching_hourly h JOIN (SELECT route_short_name FROM marts.mart_bunching_hourly WHERE $__timeFilter(event_hour) GROUP BY route_short_name ORDER BY SUM(bunching_event_count) DESC LIMIT 8) top ON top.route_short_name = h.route_short_name WHERE $__timeFilter(h.event_hour) ORDER BY 1"
+          "rawSql": "SELECT h.event_hour AS \"time\", (h.route_short_name || ' ' || h.route_long_name) AS metric, h.bunching_event_count AS value FROM marts.mart_bunching_hourly h JOIN (SELECT route_short_name FROM marts.mart_bunching_hourly WHERE $__timeFilter(event_hour) GROUP BY route_short_name ORDER BY SUM(bunching_event_count) DESC LIMIT 8) top ON top.route_short_name = h.route_short_name WHERE $__timeFilter(h.event_hour) ORDER BY 1"
         }
       ],
-      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] }
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10, "axisLabel": "Events / hour" } }, "overrides": [] }
     },
     {
       "id": 5,
       "type": "table",
       "title": "Recent bunching events -- why they happened",
-      "description": "Each row: a real detected bunching pair, its route, and the weather closest in time to when it happened (mart_bunching_events, joined via dbt LATERAL). Road-restriction context isn't joined in yet -- see docs/architecture.md Phase 8 for why.",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "description": "Each row: a real detected bunching pair, its route, and the weather closest in time to when it happened (mart_bunching_events, joined via dbt LATERAL). \"Stops apart\": 0 = same stop, 1 = one stop apart. Road-restriction context isn't joined in yet -- see docs/architecture.md Phase 8 for why.",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
       "datasource": { "type": "postgres", "uid": "P_TTC_SERVING" },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT event_time AS \"Time\", route_short_name AS \"Route\", route_long_name AS \"Name\", vehicle_id_a AS \"Vehicle A\", vehicle_id_b AS \"Vehicle B\", stop_sequence_gap AS \"Stop gap\", temperature_c AS \"Temp (C)\", weather_condition AS \"Weather\" FROM marts.mart_bunching_events WHERE $__timeFilter(event_time) ORDER BY event_time DESC LIMIT 200"
+          "rawSql": "SELECT event_time AS \"Time\", route_short_name AS \"Route\", route_long_name AS \"Name\", vehicle_id_a AS \"Vehicle A\", vehicle_id_b AS \"Vehicle B\", stop_sequence_gap AS \"Stops apart\", temperature_c AS \"Temp (C)\", weather_condition AS \"Weather\" FROM marts.mart_bunching_events WHERE $__timeFilter(event_time) ORDER BY event_time DESC LIMIT 200"
         }
       ],
       "fieldConfig": { "defaults": {}, "overrides": [] }
