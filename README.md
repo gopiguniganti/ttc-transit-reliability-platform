@@ -1,12 +1,18 @@
 # Toronto Transit Reliability Platform
 
-A learning project: a lakehouse pipeline that ingests real TTC realtime vehicle positions, plus static
-schedules, road restrictions, and weather, to answer *where, when, and why TTC surface service is
-unreliable.*
+**A lakehouse pipeline that ingests real TTC realtime vehicle positions, static schedules, road
+restrictions, and weather — to answer *where, when, and why TTC surface service is unreliable.***
 
-Status: **Phases 1–9a built and verified end to end** — live ingestion, Kafka, Structured Streaming to
-Delta, a dimensional model, a bunching heuristic, weather/road-restriction context data, Airflow
-orchestration, a dbt gold layer, and a Grafana dashboard on top of it.
+![status](https://img.shields.io/badge/status-phases_1--9a_verified-2ea44f)
+![python](https://img.shields.io/badge/python-3.11-3776AB)
+![spark](https://img.shields.io/badge/spark-structured_streaming-E25A1C)
+![dbt](https://img.shields.io/badge/dbt-gold_layer-FF694B)
+![grafana](https://img.shields.io/badge/grafana-dashboard-F46800)
+
+This is a learning project — see [Why it's built this way](#why-its-built-this-way) for the reasoning
+behind each choice, not just what was built.
+
+---
 
 ## What it found
 
@@ -16,7 +22,7 @@ the bunching heuristic (Phase 5 — two vehicles on the same route within one st
 being a small fraction of the network:
 
 | Route | Name | Bunching events |
-|---|---|---|
+|:-----:|------|-----------------:|
 | 504 | King | 111,592 |
 | 506 | Carlton | 79,723 |
 | 52 | Lawrence West | 71,402 |
@@ -25,75 +31,94 @@ being a small fraction of the network:
 
 504 King and 506 Carlton alone account for more flagged events than the next four routes combined — both
 run in mixed traffic on some of the busiest streetcar rights-of-way in the city, which matches their real
-reputation for bunching. See `docs/architecture.md` for the full methodology and its limitations (notably:
-no direction-of-travel data in the live feed, so this can't yet distinguish "two streetcars bunched
-together" from "two streetcars passing each other going opposite ways" with full precision).
+reputation for bunching. Full methodology and its limitations are in `docs/architecture.md` (notably: no
+direction-of-travel data in the live feed, so this can't yet distinguish "two streetcars bunched together"
+from "two streetcars passing each other going opposite ways" with full precision).
 
-![Grafana dashboard showing bunching events, top routes, and a per-hour trend chart](docs/images/grafana-dashboard.png)
+<p align="center">
+  <img src="docs/images/grafana-dashboard.png" alt="Grafana dashboard showing bunching events, top routes, and a per-hour trend chart" width="850">
+</p>
+<p align="center"><sub><em>Grafana, reading directly off dbt's gold-layer marts — no custom frontend.</em></sub></p>
 
-## How data moves through it
+---
+
+## Architecture
+
+Raw files are the ground truth — everything else (Kafka, Delta, Postgres, dbt's marts) is derived and
+replayable from them. Solid arrows are data flow; dashed arrows are triggers or scheduling.
 
 ```mermaid
-flowchart LR
-    subgraph collector["collector host (always-on)"]
+flowchart TD
+    subgraph collector["Collector host (always-on)"]
         poller["poller.py<br/>polls TTC GTFS-RT every 20s"]
-        raw[("raw .pb.gz<br/>+ bronze parquet<br/>on local disk")]
+        raw[("raw .pb.gz + bronze parquet<br/>on local disk")]
         poller --> raw
     end
 
-    subgraph compute["compute host"]
-        kafka["Kafka<br/>ttc.vehicle_positions"]
-        stream["Spark Structured Streaming"]
-        deltabronze[("Delta: bronze<br/>MinIO")]
-        deltasilver[("Delta: silver<br/>MinIO")]
-        bunch["bunching heuristic<br/>(Spark batch)"]
-        pg[("Postgres: serving<br/>bunching_events, dim_route,<br/>fact_weather, road_restrictions")]
-        dbtx["dbt<br/>staging + marts"]
-        grafana["Grafana dashboard"]
-        gtfs["GTFS static loader"]
-        ctx["weather + road<br/>restrictions loaders"]
-        airflow["Airflow<br/>schedules the loaders + dbt"]
+    kafka["Kafka<br/>ttc.vehicle_positions"]
+    poller -."Kafka publish".-> kafka
+    raw -."replay.py<br/>(backfill/testing)".-> kafka
 
-        poller -.Kafka publish.-> kafka
-        kafka --> stream --> deltabronze
-        deltabronze --> bunch --> deltasilver
-        bunch --> pg
-        gtfs --> pg
-        ctx --> pg
-        pg --> dbtx --> grafana
-        airflow -.triggers.-> gtfs
-        airflow -.triggers.-> ctx
-        airflow -.triggers.-> dbtx
+    subgraph streaming["Compute host — streaming"]
+        stream["Spark Structured Streaming"]
+        deltabronze[("Delta: bronze<br/>(MinIO)")]
+        bunch["bunching heuristic<br/>(Spark batch)"]
+        deltasilver[("Delta: silver<br/>(MinIO)")]
+        kafka --> stream --> deltabronze --> bunch --> deltasilver
     end
 
-    raw -."replay.py<br/>(backfill/testing)".-> kafka
+    subgraph loaders["Compute host — on-demand loaders"]
+        gtfs["GTFS static loader"]
+        ctx["weather + road-restriction<br/>loaders"]
+    end
+
+    subgraph serving["Compute host — serving"]
+        pg[("Postgres<br/>bunching_events, dim_route,<br/>fact_weather, road_restrictions")]
+        dbtx["dbt: staging + marts"]
+        grafana["Grafana dashboard"]
+        pg --> dbtx --> grafana
+    end
+
+    bunch --> pg
+    gtfs --> pg
+    ctx --> pg
+
+    airflow["Airflow"] -."schedules".-> gtfs
+    airflow -."schedules".-> ctx
+    airflow -."schedules".-> dbtx
 ```
 
-Raw files are the ground truth — everything else (Kafka, Delta, Postgres, dbt's marts) is derived and
-replayable from them. If a bug is found in any transformation downstream, the fix gets applied and the
-raw archive gets replayed to regenerate correct output — this actually happened during development (see
-"A real bug" below).
-
-## A real bug this project caught (and how it was found)
-
-Early Grafana dashboard runs showed 44% of "bunching events" as a vehicle matched against itself —
-impossible, and a clear sign something was wrong upstream, not a modeling quirk. Traced to ~2.9M
-duplicate rows in bronze from a Kafka crash-loop during a backlog replay: a batch that was read but not
-cleanly checkpointed before Kafka went down got reprocessed on restart. Fixed by deduplicating bronze
-before the bunching window function runs, with a defensive filter and a dbt test
-(`assert_no_self_bunching`) so a regression fails the build loudly instead of silently shipping bad
-numbers again. Full writeup, including a second bug this surfaced (a Postgres `DROP TABLE` conflict with
-a dbt view depending on the same table), is in `docs/architecture.md`.
+If a bug is found in any transformation downstream, the fix gets applied and the raw archive gets
+replayed to regenerate correct output — this actually happened during development (see below).
 
 This runs across two machines:
 
-- **collector host** — an always-on machine that just runs the poller (`compose.poller.yml`)
-- **compute host** — your PC, running everything else (`compose.infra.yml`): Kafka, MinIO, Postgres,
-  Spark, Jupyter, Airflow, dbt, Grafana
+| Host | Role | Compose file |
+|---|---|---|
+| **Collector host** | Always-on; runs only the poller | `compose.poller.yml` |
+| **Compute host** | Your PC; runs everything else — Kafka, MinIO, Postgres, Spark, Jupyter, Airflow, dbt, Grafana | `compose.infra.yml` |
 
-## Quickstart
+---
 
-### On the collector host: run the poller
+## A real bug this project caught
+
+Early Grafana dashboard runs showed 44% of "bunching events" as a vehicle matched against itself —
+impossible, and a clear sign something was wrong upstream, not a modeling quirk.
+
+| | |
+|---|---|
+| **Symptom** | 44% of bunching events were a vehicle matched against itself |
+| **Root cause** | ~2.9M duplicate rows in bronze from a Kafka crash-loop during a backlog replay — a batch that was read but not cleanly checkpointed before Kafka went down got reprocessed on restart |
+| **Fix** | Dedupe bronze before the bunching window function runs, plus a defensive filter and a dbt test (`assert_no_self_bunching`) so a regression fails the build loudly instead of silently shipping bad numbers again |
+
+Full writeup, including a second bug this surfaced (a Postgres `DROP TABLE` conflict with a dbt view
+depending on the same table), is in `docs/architecture.md`.
+
+---
+
+## Getting started
+
+### 1. Collector host — run the poller
 
 ```bash
 git clone <this-repo>
@@ -103,12 +128,13 @@ make poller-logs        # watch it start pulling data; Ctrl+C to stop watching (
 ```
 
 Check on it any time, or stop it (data already on disk is untouched either way):
+
 ```bash
 make poller-status
 make poller-down
 ```
 
-### On the compute host: run everything else
+### 2. Compute host — run everything else
 
 ```bash
 make on           # start Kafka, MinIO, Postgres, Spark, Jupyter, Airflow, pgAdmin, Grafana
@@ -119,17 +145,17 @@ make off           # stop everything before shutting the machine down; no data i
 `make on`/`make off` are just short names for `infra-up`/`infra-down` — handy for an overnight routine
 if you don't want the compute host running 24/7 (the collector host is the only piece that needs to be).
 
-### Everything else is on-demand, via `make`
+### 3. Everything else — on demand, via `make`
 
-```bash
-make gtfs-load           # load routes/stops/trips from TTC's static GTFS feed (Phase 3)
-make weather-load        # current Toronto conditions (Phase 6)
-make restrictions-load   # road restrictions + spatial join against stops (Phase 6)
-make replay-asap          # republish collected raw files into Kafka, for testing/backfill (Phase 2)
-make dbt-build            # build the staging views + gold marts, run all dbt tests (Phase 8)
-make dbt-test              # just the tests, faster when models haven't changed
-make dbt-docs               # dbt's auto-generated docs site, http://localhost:8087
-```
+| Command | What it does | Phase |
+|---|---|:--:|
+| `make gtfs-load` | Load routes/stops/trips from TTC's static GTFS feed | 3 |
+| `make weather-load` | Current Toronto conditions | 6 |
+| `make restrictions-load` | Road restrictions + spatial join against stops | 6 |
+| `make replay-asap` | Republish collected raw files into Kafka, for testing/backfill | 2 |
+| `make dbt-build` | Build the staging views + gold marts, run all dbt tests | 8 |
+| `make dbt-test` | Just the tests, faster when models haven't changed | 8 |
+| `make dbt-docs` | dbt's auto-generated docs site → `http://localhost:8087` | 8 |
 
 All three loaders also have an Airflow DAG that runs them on a schedule instead — paused by default
 (unpause via the UI at `:8090` or `airflow dags unpause <dag_id>`).
@@ -137,10 +163,12 @@ All three loaders also have an Airflow DAG that runs them on a schedule instead 
 Grafana is at `http://localhost:3000` (`admin`/`admin`) once `make on` has run and `make dbt-build` has
 populated the gold layer at least once.
 
-## Run the tests (no network needed, works anywhere)
+---
 
-Each Python subproject has its own tests, run inside its own Docker image so dependencies match exactly
-what production uses:
+## Running the tests
+
+No network needed, works anywhere. Each Python subproject has its own tests, run inside its own Docker
+image so dependencies match exactly what production uses:
 
 ```bash
 make test   # poller + replay tests
@@ -148,6 +176,8 @@ make test   # poller + replay tests
 
 The same pattern applies to `gtfs_static/`, `context_data/`, and their tests under `tests/` — build that
 subproject's image and run pytest inside it.
+
+---
 
 ## What's on disk after a night of collection
 
@@ -161,6 +191,8 @@ Plus, once the compute host's stack has run: a Delta table on MinIO fed by Kafka
 dimensional model and bunching/weather/restriction tables in Postgres, dbt's gold-layer marts on top of
 those, a Grafana dashboard reading the marts, and Airflow DAGs ready to keep all of it fresh on a
 schedule.
+
+---
 
 ## Why it's built this way
 
@@ -181,6 +213,8 @@ schedule.
   a product. Pointing an existing BI tool at well-modeled tables answers the "why was this bus bunched"
   question without building and maintaining a bespoke app.
 
+---
+
 ## Known limitations
 
 - **No direction-of-travel in the live feed.** GTFS-RT's `direction_id` field is 100% null in TTC's
@@ -198,15 +232,19 @@ schedule.
   about weather's effect on bunching. Running `weather-load` on a schedule (its Airflow DAG exists,
   unpause it) over more days would make this a real analysis instead of a plumbing demo.
 
+---
+
 ## Roadmap
 
-- [x] Phase 1: raw + bronze Parquet collection
-- [x] Phase 2: Kafka (real-time layer) + replay mode
-- [x] Phase 3: GTFS static → dimensional model + SCD2
-- [x] Phase 4: Spark Structured Streaming → Delta Lake
-- [x] Phase 5: silver layer, bunching heuristic
-- [x] Phase 6: road restrictions (spatial join) + weather
-- [x] Phase 7: Airflow orchestration
-- [x] Phase 8: dbt gold layer + tests
-- [x] Phase 9a: Grafana dashboard on the gold layer
-- [ ] Phase 9b: CI, decisions doc, packaging
+| Phase | Description | Status |
+|:--:|---|:--:|
+| 1 | Raw + bronze Parquet collection | ✅ |
+| 2 | Kafka (real-time layer) + replay mode | ✅ |
+| 3 | GTFS static → dimensional model + SCD2 | ✅ |
+| 4 | Spark Structured Streaming → Delta Lake | ✅ |
+| 5 | Silver layer, bunching heuristic | ✅ |
+| 6 | Road restrictions (spatial join) + weather | ✅ |
+| 7 | Airflow orchestration | ✅ |
+| 8 | dbt gold layer + tests | ✅ |
+| 9a | Grafana dashboard on the gold layer | ✅ |
+| 9b | CI, decisions doc, packaging | ⬜ |
