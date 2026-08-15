@@ -1,0 +1,24 @@
+# Provisioned declaratively (same reasoning as infra/postgres-init) so the
+# datasource exists automatically on first boot -- nothing to click through
+# in the UI, and it's reproducible if the container is ever recreated.
+apiVersion: 1
+
+datasources:
+  - name: TTC Serving (Postgres)
+    uid: P_TTC_SERVING
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: serving
+    user: ttc
+    isDefault: true
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      # dbt's marts/staging schemas aren't on Postgres's default
+      # search_path, and Grafana's datasource config has no search_path
+      # override -- so every panel query below schema-qualifies its table
+      # (e.g. "marts.mart_bunching_events") rather than relying on one.
+      queryTimeout: 60s
+    secureJsonData:
+      password: ttc_dev_password
