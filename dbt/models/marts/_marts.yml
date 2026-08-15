@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: mart_bunching_events
+    description: >
+      One row per detected bunching pair, with the route's real name and
+      the closest-in-time weather observation joined in. The end-user-facing
+      "why was this bus bunched" table -- Grafana reads this directly.
+    columns:
+      - name: route_id
+        tests:
+          - not_null
+      - name: event_time
+        tests:
+          - not_null
+
+  - name: mart_bunching_hourly
+    description: >
+      Bunching events rolled up to (route, hour), for trend charts --
+      too many individual events to plot over multiple days otherwise.
+    columns:
+      - name: route_id
+        tests:
+          - not_null
+      - name: event_hour
+        tests:
+          - not_null

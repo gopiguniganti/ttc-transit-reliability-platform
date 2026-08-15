@@ -7,6 +7,10 @@ __pycache__/
 .venv/
 .ipynb_checkpoints/
 notebooks/spark-warehouse/
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml
 dashboard.html
 pipeline-status.html
 .claude/
