@@ -14,6 +14,25 @@ behind each choice, not just what was built.
 
 ---
 
+## Tech stack
+
+| Layer | Tech | Role |
+|---|---|---|
+| Ingestion | Python, `gtfs-realtime-bindings` | Poll TTC's live GTFS-RT feed every 20s, decode protobuf → Parquet |
+| Streaming | Apache Kafka 3.8 (KRaft) | Real-time transport for vehicle positions between collector and compute hosts |
+| Processing | Apache Spark 3.5.3 (Structured Streaming + batch), PySpark | Kafka → Delta bronze ingestion, silver transforms, the bunching heuristic |
+| Storage format | Delta Lake 3.2.0 | ACID table format for the bronze/silver layers on object storage |
+| Object storage | MinIO | S3-compatible storage backing the Delta tables |
+| Database | PostgreSQL 16 | Serving layer — dimensional model, bunching events, weather, road restrictions |
+| Transformation | dbt (`dbt-postgres`) | Staging views + gold-layer marts, data tests, docs |
+| Orchestration | Apache Airflow 2.10.3 (LocalExecutor) | Schedules the Spark job, dbt build, and on-demand loaders |
+| Visualization | Grafana 11.2.0 | Dashboard reading directly off dbt's gold marts |
+| Dev tooling | JupyterLab, pgAdmin, AKHQ | Interactive exploration of Spark/Postgres/Kafka during development |
+| Infra | Docker Compose (two hosts) | Everything above runs as containers — see [Architecture](#architecture) |
+| Testing | pytest, dbt tests | Per-subproject unit tests + data-quality tests on the gold layer |
+
+---
+
 ## What it found
 
 Across ~2.4 days of real TTC vehicle-position data (2026-08-12 to 2026-08-15, ~14M raw position reports),
